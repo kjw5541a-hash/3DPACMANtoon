@@ -1,0 +1,1283 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>PAC-MAN 3D TOON - Cute Pixel Edition</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #04040c;
+            font-family: 'Courier New', Courier, monospace, sans-serif;
+        }
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+        /* 3D 화면을 귀여운 레트로 픽셀화로 강제 렌더링하는 CSS 스타일 */
+        #canvas-container canvas {
+            display: block;
+            width: 100% !important;
+            height: 100% !important;
+            image-rendering: -moz-crisp-edges;
+            image-rendering: -webkit-crisp-edges;
+            image-rendering: pixelated; 
+            image-rendering: crisp-edges;
+        }
+        /* UI Overlay */
+        #ui-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 15px;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+        }
+        .score-board {
+            background: rgba(10, 10, 30, 0.85);
+            border: 2px solid #3333ff;
+            border-radius: 8px;
+            padding: 8px 15px;
+            color: #ffd700;
+            font-size: 18px;
+            font-weight: bold;
+            box-shadow: 0 0 10px rgba(51, 51, 255, 0.5);
+        }
+        .lives-board {
+            display: flex;
+            gap: 5px;
+            background: rgba(10, 10, 30, 0.85);
+            border: 2px solid #ff3333;
+            border-radius: 8px;
+            padding: 8px 12px;
+            box-shadow: 0 0 10px rgba(255, 51, 51, 0.5);
+        }
+        .life-heart {
+            width: 18px;
+            height: 18px;
+            background-color: #ff3333;
+            clip-path: polygon(50% 15%, 80% 0%, 100% 20%, 100% 50%, 50% 95%, 0% 50%, 0% 20%, 20% 0%);
+        }
+        /* Power Gauge */
+        #power-gauge-container {
+            position: absolute;
+            top: 75px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 60%;
+            max-width: 300px;
+            height: 15px;
+            background: rgba(0, 0, 0, 0.6);
+            border: 2px solid #00ffff;
+            border-radius: 10px;
+            overflow: hidden;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        #power-gauge-bar {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, #00ffff, #0088ff);
+            box-shadow: 0 0 8px #00ffff;
+        }
+        /* Screens */
+        .screen-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(5, 5, 15, 0.92);
+            z-index: 20;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: #fff;
+            pointer-events: auto;
+        }
+        .screen-title {
+            font-size: 32px;
+            color: #ffd700;
+            text-align: center;
+            margin-bottom: 20px;
+            text-shadow: 0 0 15px rgba(255, 215, 0, 0.8), 3px 3px 0px #aa0000;
+            font-weight: 900;
+            letter-spacing: 2px;
+        }
+        .screen-btn {
+            background: #ffd700;
+            color: #000;
+            border: none;
+            padding: 12px 30px;
+            font-size: 18px;
+            font-weight: bold;
+            border-radius: 25px;
+            cursor: pointer;
+            box-shadow: 0 5px 0px #b89c00, 0 8px 15px rgba(255, 215, 0, 0.4);
+            transition: transform 0.1s, box-shadow 0.1s;
+        }
+        .screen-btn:active {
+            transform: translateY(4px);
+            box-shadow: 0 1px 0px #b89c00, 0 4px 5px rgba(255, 215, 0, 0.4);
+        }
+        .hidden {
+            display: none !important;
+        }
+        #mobile-hint {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 12px;
+            text-align: center;
+            pointer-events: none;
+        }
+    </style>
+    <!-- Three.js Library CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+    <div id="canvas-container"></div>
+
+    <!-- UI Overlay Layer -->
+    <div id="ui-container">
+        <div class="header">
+            <div class="score-board" id="score-text">SCORE: 0000</div>
+            <div class="lives-board" id="lives-container">
+                <div class="life-heart"></div>
+                <div class="life-heart"></div>
+                <div class="life-heart"></div>
+            </div>
+        </div>
+
+        <div id="power-gauge-container">
+            <div id="power-gauge-bar"></div>
+        </div>
+
+        <div id="mobile-hint">화면을 원하는 방향으로 쓸어 넘겨 조작하세요 (Swipe)</div>
+    </div>
+
+    <!-- Start Screen (난이도 선택 기능 탑재) -->
+    <div id="start-screen" class="screen-overlay">
+        <div class="screen-title">PAC-MAN<br>3D CUTE PIXEL</div>
+        <div style="font-size: 16px; margin-bottom: 20px; color: #aaa; font-weight: bold;">난이도를 선택하세요</div>
+        <div style="display: flex; flex-direction: column; gap: 15px; width: 220px;">
+            <button class="screen-btn" onclick="startGameWithDifficulty('easy')">하 (쉬움)</button>
+            <button class="screen-btn" onclick="startGameWithDifficulty('medium')" style="background: #ffb852; box-shadow: 0 5px 0px #b8811c;">중 (보통)</button>
+            <button class="screen-btn" onclick="startGameWithDifficulty('hard')" style="background: #ff3333; box-shadow: 0 5px 0px #b81c1c; color: white;">상 (어려움)</button>
+        </div>
+    </div>
+
+    <!-- Game Over Screen -->
+    <div id="gameover-screen" class="screen-overlay hidden">
+        <div class="screen-title">GAME OVER</div>
+        <div class="score-board" id="final-score" style="margin-bottom: 25px;">SCORE: 0000</div>
+        <button class="screen-btn" id="restart-btn">RETRY</button>
+    </div>
+
+    <!-- Level Clear Screen -->
+    <div id="clear-screen" class="screen-overlay hidden">
+        <div class="screen-title" style="color: #00ffcc; text-shadow: 0 0 15px rgba(0,255,204,0.8);">STAGE CLEAR!</div>
+        <button class="screen-btn" id="next-btn">NEXT STAGE</button>
+    </div>
+
+    <script>
+        // --- 게임 기본 제원 및 그리드 맵 ---
+        const TILE_SIZE = 1.5;
+        const COLS = 15;
+        const ROWS = 15;
+        const PIXEL_SCALE = 3; 
+
+        // 15x15 미로 그리드 데이터
+        const mapData = [
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,3,2,2,2,2,2,1,2,2,2,2,2,3,1],
+            [1,2,1,1,2,1,2,1,2,1,2,1,1,2,1],
+            [1,2,2,2,2,1,2,2,2,1,2,2,2,2,1],
+            [1,1,1,2,1,1,1,0,1,1,1,2,1,1,1],
+            [1,1,1,2,1,0,0,0,0,0,1,2,1,1,1],
+            [1,1,1,2,1,0,1,4,1,0,1,2,1,1,1],
+            [1,0,0,2,0,0,1,4,1,0,0,2,0,0,1],
+            [1,1,1,2,1,0,1,1,1,0,1,2,1,1,1],
+            [1,1,1,2,1,0,0,0,0,0,1,2,1,1,1],
+            [1,1,1,2,1,1,1,2,1,1,1,2,1,1,1],
+            [1,2,2,2,2,2,2,2,2,2,2,2,2,2,1],
+            [1,2,1,1,2,1,1,1,1,1,2,1,1,2,1],
+            [1,3,2,1,2,2,2,5,2,2,2,1,2,3,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+        ];
+
+        let scene, camera, renderer;
+        let clock = new THREE.Clock();
+        let gameState = 'START'; 
+        let currentStage = 0; 
+        let selectedDifficulty = 'easy'; // 전역 난이도 캐싱
+
+        // 팩맨 데이터 및 기본 스피드 정의
+        let pacman = {
+            mesh: null,
+            upperPivot: null,
+            lowerPivot: null,
+            gridX: 7,
+            gridZ: 13,
+            targetGridX: 7,
+            targetGridZ: 13,
+            dirX: 0,
+            dirZ: 0,
+            nextDirX: 0,
+            nextDirZ: 0,
+            speed: 5.0, // 난이도에 의해 유동적으로 변화
+            progress: 0.0,
+            score: 0,
+            lives: 3
+        };
+
+        // 고스트 사양 명세 및 기본 스피드 정의
+        let ghosts = [];
+        const ghostTypes = [
+            { name: "Blinky", color: 0xff3333, scatterTarget: { x: COLS - 2, z: ROWS - 2 } }, 
+            { name: "Pinky", color: 0xffb8ff, scatterTarget: { x: 1, z: 1 } },              
+            { name: "Inky", color: 0x33ffff, scatterTarget: { x: COLS - 2, z: 1 } },        
+            { name: "Clyde", color: 0xffb852, scatterTarget: { x: 1, z: ROWS - 2 } }         
+        ];
+
+        // 다양한 스테이지용 벽 색깔 테마 배열
+        const wallColors = [
+            0x1c21ad, 
+            0x1cb85c, 
+            0xb81c1c, 
+            0x8e1cb8, 
+            0xb8781c, 
+            0x1cb8b0  
+        ];
+
+        let pelletMeshes = {};
+        let totalPelletsCount = 0;
+        let remainingPellets = 0;
+
+        let powerTimer = 0.0;
+        const POWER_DURATION = 10.0; 
+
+        let wallGeometry, wallMaterial;
+        let pelletGeometry, pelletMaterial;
+        let powerPelletGeometry, powerPelletMaterial;
+
+        let touchStartX = 0;
+        let touchStartY = 0;
+
+        // --- 고도화 사운드 신시사이저 엔진 (Web Audio API) ---
+        let audioCtx = null;
+        let sirenInterval = null;
+        let lastWakaTime = 0;
+
+        function getAudioContext() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+            return audioCtx;
+        }
+
+        function playIntroSound() {
+            const ctx = getAudioContext();
+            const now = ctx.currentTime;
+            
+            const melody = [
+                { f: 261.63, d: 0.12 }, 
+                { f: 523.25, d: 0.12 }, 
+                { f: 392.00, d: 0.12 }, 
+                { f: 329.63, d: 0.12 }, 
+                { f: 523.25, d: 0.12 }, 
+                { f: 392.00, d: 0.12 }, 
+                { f: 329.63, d: 0.24 }  
+            ];
+            
+            let timeAccumulator = 0;
+            melody.forEach(note => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                
+                osc.type = 'square'; 
+                osc.frequency.setValueAtTime(note.f, now + timeAccumulator);
+                
+                gain.gain.setValueAtTime(0.001, now + timeAccumulator);
+                gain.gain.linearRampToValueAtTime(0.04, now + timeAccumulator + 0.02);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + timeAccumulator + note.d);
+                
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                
+                osc.start(now + timeAccumulator);
+                osc.stop(now + timeAccumulator + note.d);
+                
+                timeAccumulator += note.d + 0.02;
+            });
+        }
+
+        function playWakaSound() {
+            const now = Date.now();
+            if (now - lastWakaTime < 130) return; 
+            lastWakaTime = now;
+            
+            const ctx = getAudioContext();
+            const audioNow = ctx.currentTime;
+            
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            
+            osc.type = 'triangle'; 
+            osc.frequency.setValueAtTime(320, audioNow);
+            osc.frequency.exponentialRampToValueAtTime(650, audioNow + 0.06);
+            osc.frequency.exponentialRampToValueAtTime(320, audioNow + 0.12);
+            
+            gain.gain.setValueAtTime(0.001, audioNow);
+            gain.gain.linearRampToValueAtTime(0.08, audioNow + 0.04);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioNow + 0.12);
+            
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            
+            osc.start(audioNow);
+            osc.stop(audioNow + 0.12);
+        }
+
+        function startPowerSiren() {
+            if (sirenInterval) return;
+            sirenInterval = setInterval(() => {
+                if (powerTimer > 0 && gameState === 'PLAYING') {
+                    const ctx = getAudioContext();
+                    const now = ctx.currentTime;
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    
+                    osc.type = 'sawtooth'; 
+                    osc.frequency.setValueAtTime(190, now);
+                    osc.frequency.linearRampToValueAtTime(130, now + 0.2);
+                    osc.frequency.linearRampToValueAtTime(190, now + 0.4);
+                    
+                    gain.gain.setValueAtTime(0.001, now);
+                    gain.gain.linearRampToValueAtTime(0.03, now + 0.1);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+                    
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    
+                    osc.start(now);
+                    osc.stop(now + 0.4);
+                } else {
+                    clearInterval(sirenInterval);
+                    sirenInterval = null;
+                }
+            }, 450);
+        }
+
+        function playEatGhostSound() {
+            const ctx = getAudioContext();
+            const now = ctx.currentTime;
+            
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(180, now);
+            osc.frequency.exponentialRampToValueAtTime(1300, now + 0.35);
+            
+            gain.gain.setValueAtTime(0.001, now);
+            gain.gain.linearRampToValueAtTime(0.12, now + 0.05);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+            
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            
+            osc.start(now);
+            osc.stop(now + 0.35);
+        }
+
+        function playDeathSound() {
+            const ctx = getAudioContext();
+            const now = ctx.currentTime;
+            
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(550, now);
+            osc.frequency.linearRampToValueAtTime(45, now + 1.1);
+            
+            gain.gain.setValueAtTime(0.001, now);
+            gain.gain.linearRampToValueAtTime(0.12, now + 0.1);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 1.1);
+            
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            
+            osc.start(now);
+            osc.stop(now + 1.1);
+        }
+
+        // --- 씬 메인 초기화 시스템 ---
+        function init() {
+            const container = document.getElementById('canvas-container');
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x050510);
+            scene.fog = new THREE.FogExp2(0x050510, 0.038);
+
+            camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 100);
+            camera.position.set(0, 11, 8.5);
+
+            renderer = new THREE.WebGLRenderer({ antialias: false });
+            renderer.setSize(window.innerWidth / PIXEL_SCALE, window.innerHeight / PIXEL_SCALE, false);
+            renderer.setPixelRatio(1); 
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            container.appendChild(renderer.domElement);
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.55);
+            scene.add(ambientLight);
+
+            const dirLight = new THREE.DirectionalLight(0xffffff, 1.35);
+            dirLight.position.set(5, 16, 5);
+            dirLight.castShadow = true;
+            dirLight.shadow.mapSize.width = 1024;
+            dirLight.shadow.mapSize.height = 1024;
+            dirLight.shadow.camera.near = 0.5;
+            dirLight.shadow.camera.far = 40;
+            const d = 15;
+            dirLight.shadow.camera.left = -d;
+            dirLight.shadow.camera.right = d;
+            dirLight.shadow.camera.top = d;
+            dirLight.shadow.camera.bottom = -d;
+            scene.add(dirLight);
+
+            // 공용 에셋 할당
+            wallGeometry = new THREE.BoxGeometry(TILE_SIZE, TILE_SIZE, TILE_SIZE);
+            wallMaterial = new THREE.MeshToonMaterial({ color: wallColors[0] });
+
+            pelletGeometry = new THREE.SphereGeometry(0.15, 8, 8);
+            pelletMaterial = new THREE.MeshToonMaterial({ color: 0xffe699 });
+
+            powerPelletGeometry = new THREE.SphereGeometry(0.35, 12, 12);
+            powerPelletMaterial = new THREE.MeshToonMaterial({ color: 0xff88aa });
+
+            window.addEventListener('resize', onWindowResize);
+            setupInputControls();
+
+            document.getElementById('restart-btn').addEventListener('click', restartGame);
+            document.getElementById('next-btn').addEventListener('click', startNextStage);
+
+            buildMap();
+            createPacman();
+            createGhosts();
+
+            animate();
+        }
+
+        // 바닥 및 3D 미로 구조물 조성
+        function buildMap() {
+            const floorGeo = new THREE.PlaneGeometry(COLS * TILE_SIZE, ROWS * TILE_SIZE);
+            const floorMat = new THREE.MeshStandardMaterial({ color: 0x090915, roughness: 0.8 });
+            const floor = new THREE.Mesh(floorGeo, floorMat);
+            floor.rotation.x = -Math.PI / 2;
+            floor.position.set(-TILE_SIZE/2, -TILE_SIZE/2, -TILE_SIZE/2);
+            floor.receiveShadow = true;
+            scene.add(floor);
+
+            const gridHelper = new THREE.GridHelper(COLS * TILE_SIZE, COLS, 0x2222ff, 0x0c0c2e);
+            gridHelper.position.set(-TILE_SIZE/2, -TILE_SIZE/2 + 0.01, -TILE_SIZE/2);
+            scene.add(gridHelper);
+
+            totalPelletsCount = 0;
+            for (let z = 0; z < ROWS; z++) {
+                for (let x = 0; x < COLS; x++) {
+                    const cell = mapData[z][x];
+                    const worldX = (x - COLS / 2) * TILE_SIZE;
+                    const worldZ = (z - ROWS / 2) * TILE_SIZE;
+
+                    if (cell === 1) {
+                        const wall = new THREE.Mesh(wallGeometry, wallMaterial);
+                        wall.position.set(worldX, 0, worldZ);
+                        wall.castShadow = true;
+                        wall.receiveShadow = true;
+                        scene.add(wall);
+                    } else if (cell === 2) {
+                        const pellet = new THREE.Mesh(pelletGeometry, pelletMaterial);
+                        pellet.position.set(worldX, -0.2, worldZ);
+                        scene.add(pellet);
+                        pelletMeshes[`${x},${z}`] = pellet;
+                        totalPelletsCount++;
+                    } else if (cell === 3) {
+                        const pPellet = new THREE.Mesh(powerPelletGeometry, powerPelletMaterial);
+                        pPellet.position.set(worldX, -0.1, worldZ);
+                        scene.add(pPellet);
+                        pelletMeshes[`${x},${z}`] = pPellet;
+                        totalPelletsCount++;
+                    }
+                }
+            }
+            remainingPellets = totalPelletsCount;
+        }
+
+        // 입 벌리기(Chomping) 입체 디테일이 부여된 팩맨 3D Mesh
+        function createPacman() {
+            const pacGroup = new THREE.Group();
+            const pacToonMaterial = new THREE.MeshToonMaterial({ color: 0xffd700 });
+
+            const upperPivot = new THREE.Group();
+            const upperJaw = new THREE.Mesh(
+                new THREE.SphereGeometry(0.45, 24, 16, 0, Math.PI * 2, 0, Math.PI / 2),
+                pacToonMaterial
+            );
+            upperJaw.rotation.x = -Math.PI / 2;
+            upperPivot.add(upperJaw);
+
+            const lowerPivot = new THREE.Group();
+            const lowerJaw = new THREE.Mesh(
+                new THREE.SphereGeometry(0.45, 24, 16, 0, Math.PI * 2, 0, Math.PI / 2),
+                pacToonMaterial
+            );
+            lowerJaw.rotation.x = Math.PI / 2;
+            lowerPivot.add(lowerJaw);
+
+            pacGroup.add(upperPivot);
+            pacGroup.add(lowerPivot);
+
+            scene.add(pacGroup);
+
+            pacman.mesh = pacGroup;
+            pacman.upperPivot = upperPivot;
+            pacman.lowerPivot = lowerPivot;
+
+            resetActorPosition(pacman, 7, 13);
+        }
+
+        // 툰스타일 돔형 고스트 설계
+        function createGhosts() {
+            ghostTypes.forEach((type, index) => {
+                const ghostGroup = new THREE.Group();
+                const bodyMat = new THREE.MeshToonMaterial({ color: type.color });
+
+                const headGeom = new THREE.SphereGeometry(0.38, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2);
+                const head = new THREE.Mesh(headGeom, bodyMat);
+                head.position.y = 0.15;
+                ghostGroup.add(head);
+
+                const bodyGeom = new THREE.CylinderGeometry(0.38, 0.38, 0.45, 16);
+                const body = new THREE.Mesh(bodyGeom, bodyMat);
+                body.position.y = -0.05;
+                ghostGroup.add(body);
+
+                const partsGroup = new THREE.Group();
+                partsGroup.add(head);
+                partsGroup.add(body);
+                ghostGroup.add(partsGroup);
+
+                // 유령 눈 구성
+                const eyeGeom = new THREE.SphereGeometry(0.09, 8, 8);
+                const eyeWhiteMat = new THREE.MeshToonMaterial({ color: 0xffffff });
+                const leftEye = new THREE.Mesh(eyeGeom, eyeWhiteMat);
+                leftEye.position.set(-0.13, 0.15, 0.28);
+                const rightEye = new THREE.Mesh(eyeGeom, eyeWhiteMat);
+                rightEye.position.set(0.13, 0.15, 0.28);
+                ghostGroup.add(leftEye, rightEye);
+
+                const pupilGeom = new THREE.SphereGeometry(0.045, 8, 8);
+                const pupilMat = new THREE.MeshToonMaterial({ color: 0x0000cc });
+                const leftPupil = new THREE.Mesh(pupilGeom, pupilMat);
+                leftPupil.position.set(-0.13, 0.15, 0.34);
+                const rightPupil = new THREE.Mesh(pupilGeom, pupilMat);
+                rightPupil.position.set(0.13, 0.15, 0.34);
+                ghostGroup.add(leftPupil, rightPupil);
+
+                scene.add(ghostGroup);
+
+                let spawnX = 7;
+                let spawnZ = 7;
+                if (type.name === "Blinky") { spawnX = 7; spawnZ = 5; }
+                else if (type.name === "Pinky") { spawnX = 7; spawnZ = 6; }
+                else if (type.name === "Inky") { spawnX = 7; spawnZ = 7; }
+                else if (type.name === "Clyde") { spawnX = 7; spawnZ = 7; }
+
+                ghosts.push({
+                    mesh: ghostGroup,
+                    bodyMesh: partsGroup, 
+                    name: type.name,
+                    baseColor: type.color,
+                    gridX: spawnX,
+                    gridZ: spawnZ,
+                    targetGridX: spawnX,
+                    targetGridZ: spawnZ,
+                    spawnGridX: spawnX,
+                    spawnGridZ: spawnZ,
+                    dirX: 0,
+                    dirZ: 0,
+                    progress: 0.0,
+                    speed: 3.5,
+                    state: 'CHASE', 
+                    scatterTarget: type.scatterTarget,
+                    index: index
+                });
+            });
+        }
+
+        // 액터 리스폰 리셋 보정
+        function resetActorPosition(actor, gridX, gridZ) {
+            actor.gridX = gridX;
+            actor.gridZ = gridZ;
+            actor.targetGridX = gridX;
+            actor.targetGridZ = gridZ;
+            actor.progress = 0;
+            actor.dirX = 0;
+            actor.dirZ = 0;
+            if (actor === pacman) {
+                actor.nextDirX = 0;
+                actor.nextDirZ = 0;
+            }
+
+            const worldX = (gridX - COLS / 2) * TILE_SIZE;
+            const worldZ = (gridZ - ROWS / 2) * TILE_SIZE;
+            actor.mesh.position.set(worldX, 0, worldZ);
+        }
+
+        // --- 컨트롤 핸들러 구성 ---
+        function setupInputControls() {
+            window.addEventListener('keydown', (e) => {
+                if (gameState !== 'PLAYING') return;
+                switch (e.key) {
+                    case 'ArrowUp':
+                    case 'w':
+                    case 'W':
+                        requestDirection(0, -1); break;
+                    case 'ArrowDown':
+                    case 's':
+                    case 'S':
+                        requestDirection(0, 1); break;
+                    case 'ArrowLeft':
+                    case 'a':
+                    case 'A':
+                        requestDirection(-1, 0); break;
+                    case 'ArrowRight':
+                    case 'd':
+                    case 'D':
+                        requestDirection(1, 0); break;
+                }
+            });
+
+            window.addEventListener('touchstart', (e) => {
+                touchStartX = e.touches[0].clientX;
+                touchStartY = e.touches[0].clientY;
+            }, { passive: true });
+
+            window.addEventListener('touchend', (e) => {
+                if (gameState !== 'PLAYING') return;
+                const touchEndX = e.changedTouches[0].clientX;
+                const touchEndY = e.changedTouches[0].clientY;
+
+                const dx = touchEndX - touchStartX;
+                const dy = touchEndY - touchStartY;
+
+                if (Math.abs(dx) > 30 || Math.abs(dy) > 30) {
+                    if (Math.abs(dx) > Math.abs(dy)) {
+                        if (dx > 0) requestDirection(1, 0);
+                        else requestDirection(-1, 0);
+                    } else {
+                        if (dy > 0) requestDirection(0, 1);
+                        else requestDirection(0, -1);
+                    }
+                }
+            }, { passive: true });
+        }
+
+        function requestDirection(dx, dz) {
+            pacman.nextDirX = dx;
+            pacman.nextDirZ = dz;
+        }
+
+        function isPassable(gridX, gridZ) {
+            if (gridX < 0 || gridX >= COLS || gridZ < 0 || gridZ >= ROWS) return false;
+            return mapData[gridZ][gridX] !== 1; 
+        }
+
+        function isPassableForGhost(gridX, gridZ, ghost) {
+            if (gridX < 0 || gridX >= COLS || gridZ < 0 || gridZ >= ROWS) return false;
+            
+            const cell = mapData[gridZ][gridX];
+            if (cell === 1) return false; 
+
+            const isHouseTile = (gridX === 7 && (gridZ === 6 || gridZ === 7));
+            if (isHouseTile) {
+                if (ghost.state === 'EATEN') return true;
+                const currentlyInside = (ghost.gridX === 7 && (ghost.gridZ === 6 || ghost.gridZ === 7));
+                if (currentlyInside) return true;
+                return false;
+            }
+            return true;
+        }
+
+        // --- 모션 및 AI 알고리즘 연동 업데이트 ---
+
+        function updatePacman(delta) {
+            if (pacman.dirX === 0 && pacman.dirZ === 0) {
+                if (isPassable(pacman.gridX + pacman.nextDirX, pacman.gridZ + pacman.nextDirZ)) {
+                    pacman.dirX = pacman.nextDirX;
+                    pacman.dirZ = pacman.nextDirZ;
+                    pacman.targetGridX = pacman.gridX + pacman.dirX;
+                    pacman.targetGridZ = pacman.gridZ + pacman.dirZ;
+                    pacman.progress = 0;
+                }
+            }
+
+            if (pacman.dirX !== 0 || pacman.dirZ !== 0) {
+                pacman.progress += pacman.speed * delta;
+
+                let targetAngle = Math.atan2(-pacman.dirZ, pacman.dirX);
+                
+                let diff = targetAngle - pacman.mesh.rotation.y;
+                while (diff < -Math.PI) diff += Math.PI * 2;
+                while (diff > Math.PI) diff -= Math.PI * 2;
+                pacman.mesh.rotation.y += diff * 0.25; 
+
+                if (pacman.progress >= 1.0) {
+                    pacman.gridX = pacman.targetGridX;
+                    pacman.gridZ = pacman.targetGridZ;
+                    pacman.progress = 0.0;
+
+                    if (isPassable(pacman.gridX + pacman.nextDirX, pacman.gridZ + pacman.nextDirZ)) {
+                        pacman.dirX = pacman.nextDirX;
+                        pacman.dirZ = pacman.nextDirZ;
+                    } else if (!isPassable(pacman.gridX + pacman.dirX, pacman.gridZ + pacman.dirZ)) {
+                        pacman.dirX = 0;
+                        pacman.dirZ = 0;
+                    }
+
+                    pacman.targetGridX = pacman.gridX + pacman.dirX;
+                    pacman.targetGridZ = pacman.gridZ + pacman.dirZ;
+
+                    checkCollisionsWithPellets();
+                }
+
+                const currWorldX = (pacman.gridX - COLS / 2) * TILE_SIZE;
+                const currWorldZ = (pacman.gridZ - ROWS / 2) * TILE_SIZE;
+                const targetWorldX = (pacman.targetGridX - COLS / 2) * TILE_SIZE;
+                const targetWorldZ = (pacman.targetGridZ - ROWS / 2) * TILE_SIZE;
+
+                pacman.mesh.position.x = currWorldX + (targetWorldX - currWorldX) * pacman.progress;
+                pacman.mesh.position.z = currWorldZ + (targetWorldZ - currWorldZ) * pacman.progress;
+            }
+
+            if (pacman.dirX !== 0 || pacman.dirZ !== 0) {
+                const wave = Math.abs(Math.sin(clock.getElapsedTime() * 15));
+                const maxChompAngle = 0.785; 
+                
+                pacman.upperPivot.rotation.x = -maxChompAngle * wave;
+                pacman.lowerPivot.rotation.x = maxChompAngle * wave;
+
+                const squish = 1.0 + wave * 0.12;
+                pacman.mesh.scale.set(1.0 / squish, squish, 1.0);
+            } else {
+                pacman.upperPivot.rotation.x = -0.01;
+                pacman.lowerPivot.rotation.x = 0.01;
+                pacman.mesh.scale.set(1.0, 1.0, 1.0); 
+            }
+        }
+
+        function updateGhosts(delta) {
+            ghosts.forEach(ghost => {
+                
+                const isInsideHouse = (ghost.gridX === 7 && (ghost.gridZ === 6 || ghost.gridZ === 7));
+                if (isInsideHouse && ghost.state !== 'EATEN') {
+                    if (ghost.dirX === 0 && ghost.dirZ === 0 || ghost.progress >= 1.0) {
+                        if (ghost.progress >= 1.0) {
+                            ghost.gridX = ghost.targetGridX;
+                            ghost.gridZ = ghost.targetGridZ;
+                            ghost.progress = 0.0;
+                        }
+
+                        ghost.dirX = 0;
+                        ghost.dirZ = -1;
+                        ghost.targetGridX = ghost.gridX;
+                        ghost.targetGridZ = ghost.gridZ - 1;
+                    }
+                    
+                    ghost.progress += ghost.speed * 0.6 * delta;
+                    const currWorldX = (ghost.gridX - COLS / 2) * TILE_SIZE;
+                    const currWorldZ = (ghost.gridZ - ROWS / 2) * TILE_SIZE;
+                    const targetWorldX = (ghost.targetGridX - COLS / 2) * TILE_SIZE;
+                    const targetWorldZ = (ghost.targetGridZ - ROWS / 2) * TILE_SIZE;
+
+                    ghost.mesh.position.x = currWorldX + (targetWorldX - currWorldX) * ghost.progress;
+                    ghost.mesh.position.z = currWorldZ + (targetWorldZ - currWorldZ) * ghost.progress;
+                    return; 
+                }
+
+                if (ghost.dirX === 0 && ghost.dirZ === 0 || ghost.progress >= 1.0) {
+                    if (ghost.progress >= 1.0) {
+                        ghost.gridX = ghost.targetGridX;
+                        ghost.gridZ = ghost.targetGridZ;
+                        ghost.progress = 0.0;
+                    }
+
+                    let possibleMoves = [];
+                    const directions = [
+                        { x: 0, z: -1 }, 
+                        { x: 0, z: 1 },  
+                        { x: -1, z: 0 }, 
+                        { x: 1, z: 0 }   
+                    ];
+
+                    directions.forEach(d => {
+                        if (d.x === -ghost.dirX && d.z === -ghost.dirZ) return;
+
+                        if (isPassableForGhost(ghost.gridX + d.x, ghost.gridZ + d.z, ghost)) {
+                            possibleMoves.push(d);
+                        }
+                    });
+
+                    if (possibleMoves.length === 0) {
+                        possibleMoves.push({ x: -ghost.dirX, z: -ghost.dirZ });
+                    }
+
+                    let chosenMove = possibleMoves[0];
+
+                    if (possibleMoves.length > 1) {
+                        let target = { x: 7, z: 7 };
+
+                        if (ghost.state === 'EATEN') {
+                            target = { x: 7, z: 5 };
+                        } else if (ghost.state === 'FRIGHTENED') {
+                            chosenMove = possibleMoves[Math.floor(Math.random() * possibleMoves.length)];
+                        } else {
+                            const isChase = ghost.state === 'CHASE';
+                            if (isChase) {
+                                switch (ghost.name) {
+                                    case "Blinky":
+                                        target.x = pacman.gridX;
+                                        target.z = pacman.gridZ;
+                                        break;
+                                    case "Pinky":
+                                        target.x = pacman.gridX + pacman.dirX * 3;
+                                        target.z = pacman.gridZ + pacman.dirZ * 3;
+                                        break;
+                                    case "Inky":
+                                        const blinky = ghosts.find(g => g.name === "Blinky");
+                                        if (blinky) {
+                                            const pivotX = pacman.gridX + pacman.dirX * 2;
+                                            const pivotZ = pacman.gridZ + pacman.dirZ * 2;
+                                            const vectorX = pivotX - blinky.gridX;
+                                            const vectorZ = pivotZ - blinky.gridZ;
+                                            target.x = blinky.gridX + vectorX * 2;
+                                            target.z = blinky.gridZ + vectorZ * 2;
+                                        } else {
+                                            target.x = pacman.gridX;
+                                            target.z = pacman.gridZ;
+                                        }
+                                        break;
+                                    case "Clyde":
+                                        const distanceToPac = Math.hypot(ghost.gridX - pacman.gridX, ghost.gridZ - pacman.gridZ);
+                                        if (distanceToPac > 6.5) {
+                                            target.x = pacman.gridX;
+                                            target.z = pacman.gridZ;
+                                        } else {
+                                            target.x = ghost.scatterTarget.x;
+                                            target.z = ghost.scatterTarget.z;
+                                        }
+                                        break;
+                                }
+                            } else {
+                                target = ghost.scatterTarget;
+                            }
+                        }
+
+                        if (ghost.state !== 'FRIGHTENED') {
+                            let minDistance = Infinity;
+                            possibleMoves.forEach(move => {
+                                const nextX = ghost.gridX + move.x;
+                                const nextZ = ghost.gridZ + move.z;
+                                const dist = Math.hypot(nextX - target.x, nextZ - target.z);
+                                if (dist < minDistance) {
+                                    minDistance = dist;
+                                    chosenMove = move;
+                                }
+                            });
+                        }
+                    }
+
+                    ghost.dirX = chosenMove.x;
+                    ghost.dirZ = chosenMove.z;
+                    ghost.targetGridX = ghost.gridX + ghost.dirX;
+                    ghost.targetGridZ = ghost.gridZ + ghost.dirZ;
+                }
+
+                let speedMod = ghost.speed;
+                if (ghost.state === 'FRIGHTENED') speedMod = ghost.speed * 0.55; 
+                if (ghost.state === 'EATEN') speedMod = ghost.speed * 2.3;       
+
+                ghost.progress += speedMod * delta;
+
+                const currWorldX = (ghost.gridX - COLS / 2) * TILE_SIZE;
+                const currWorldZ = (ghost.gridZ - ROWS / 2) * TILE_SIZE;
+                const targetWorldX = (ghost.targetGridX - COLS / 2) * TILE_SIZE;
+                const targetWorldZ = (ghost.targetGridZ - ROWS / 2) * TILE_SIZE;
+
+                ghost.mesh.position.x = currWorldX + (targetWorldX - currWorldX) * ghost.progress;
+                ghost.mesh.position.z = currWorldZ + (targetWorldZ - currWorldZ) * ghost.progress;
+
+                ghost.mesh.position.y = 0.15 + Math.sin(clock.getElapsedTime() * 7.5 + ghost.index) * 0.12;
+                ghost.mesh.rotation.z = Math.sin(clock.getElapsedTime() * 5.5 + ghost.index) * 0.14;
+
+                if (ghost.dirX !== 0 || ghost.dirZ !== 0) {
+                    ghost.mesh.rotation.y = Math.atan2(-ghost.dirZ, ghost.dirX);
+                }
+
+                if (ghost.state === 'EATEN' && ghost.gridX === 7 && ghost.gridZ === 5) {
+                    ghost.state = 'CHASE';
+                    ghost.bodyMesh.visible = true; 
+                    updateGhostVisualColor(ghost);
+                    resetActorPosition(ghost, 7, 5);
+                }
+            });
+        }
+
+        // --- 룰 및 콜리전 프로세서 ---
+
+        function checkCollisionsWithPellets() {
+            const key = `${pacman.gridX},${pacman.gridZ}`;
+            if (pelletMeshes[key]) {
+                const mesh = pelletMeshes[key];
+                scene.remove(mesh);
+                delete pelletMeshes[key];
+
+                const type = mapData[pacman.gridZ][pacman.gridX];
+                if (type === 2) {
+                    pacman.score += 10;
+                    playWakaSound(); 
+                } else if (type === 3) {
+                    pacman.score += 50;
+                    playWakaSound(); 
+                    activatePowerMode();
+                }
+
+                mapData[pacman.gridZ][pacman.gridX] = 0;
+                remainingPellets--;
+
+                updateScoreUI();
+
+                if (remainingPellets <= 0) {
+                    endLevelClear();
+                }
+            }
+        }
+
+        function activatePowerMode() {
+            powerTimer = POWER_DURATION;
+            document.getElementById('power-gauge-container').style.opacity = '1';
+
+            ghosts.forEach(ghost => {
+                if (ghost.state !== 'EATEN') {
+                    ghost.state = 'FRIGHTENED';
+                    updateGhostVisualColor(ghost);
+                }
+            });
+
+            startPowerSiren(); 
+        }
+
+        function updateGhostVisualColor(ghost) {
+            let targetColor = ghost.baseColor;
+
+            if (ghost.state === 'FRIGHTENED') {
+                targetColor = 0x2222ff; 
+                if (powerTimer < 3.0 && Math.floor(powerTimer * 5) % 2 === 0) {
+                    targetColor = 0xffffff; 
+                }
+            }
+
+            ghost.bodyMesh.children.forEach(mesh => {
+                if (mesh.material) {
+                    mesh.material.color.setHex(targetColor);
+                }
+            });
+        }
+
+        function checkActorCollisions() {
+            ghosts.forEach(ghost => {
+                const distance = pacman.mesh.position.distanceTo(ghost.mesh.position);
+                if (distance < 0.68) {
+                    if (ghost.state === 'FRIGHTENED') {
+                        ghost.state = 'EATEN';
+                        pacman.score += 200;
+                        updateScoreUI();
+                        ghost.bodyMesh.visible = false; 
+                        playEatGhostSound(); 
+                    } else if (ghost.state === 'CHASE' || ghost.state === 'SCATTER') {
+                        handlePacmanDeath();
+                    }
+                }
+            });
+        }
+
+        function handlePacmanDeath() {
+            gameState = 'DYING';
+            playDeathSound(); 
+
+            let deathProgress = 0;
+            function runDeathAnim() {
+                if (deathProgress < 1.0) {
+                    deathProgress += 0.05;
+                    pacman.mesh.rotation.x += 0.3;
+                    pacman.mesh.scale.subScalar(0.04);
+                    requestAnimationFrame(runDeathAnim);
+                } else {
+                    pacman.mesh.rotation.set(0, 0, 0);
+                    pacman.mesh.scale.set(1, 1, 1);
+                    finalizeDeath();
+                }
+            }
+            runDeathAnim();
+        }
+
+        function finalizeDeath() {
+            pacman.lives--;
+            updateLivesUI();
+
+            if (pacman.lives <= 0) {
+                endGameOver();
+            } else {
+                resetActorPosition(pacman, 7, 13);
+                ghosts.forEach((ghost, index) => {
+                    let startX = 7;
+                    let startZ = 7;
+                    if (ghost.name === "Blinky") { startX = 7; startZ = 5; }
+                    else if (ghost.name === "Pinky") { startX = 7; startZ = 6; }
+                    else { startX = 7; startZ = 7; }
+
+                    resetActorPosition(ghost, startX, startZ);
+                    ghost.state = 'CHASE';
+                    ghost.bodyMesh.visible = true;
+                    updateGhostVisualColor(ghost);
+                });
+                gameState = 'PLAYING';
+            }
+        }
+
+        // --- 오버레이 관리 UI ---
+
+        function updateScoreUI() {
+            document.getElementById('score-text').textContent = "SCORE: " + String(pacman.score).padStart(4, '0');
+        }
+
+        function updateLivesUI() {
+            const container = document.getElementById('lives-container');
+            container.innerHTML = '';
+            for (let i = 0; i < pacman.lives; i++) {
+                const heart = document.createElement('div');
+                heart.className = 'life-heart';
+                container.appendChild(heart);
+            }
+        }
+
+        // --- 난이도 선택 분기 및 라이프사이클 처리 ---
+
+        // [추가] 선택한 난이도 사양에 맞춘 팩맨/적들의 실시간 이동 속도 대입 함수
+        function applyDifficultySpeeds() {
+            if (selectedDifficulty === 'easy') {
+                pacman.speed = 5.0;                      // 팩맨 기본 (100%)
+                ghosts.forEach(g => g.speed = 3.5);      // 적 기본 (100%)
+            } else if (selectedDifficulty === 'medium') {
+                pacman.speed = 5.0 * 0.9;                // 팩맨 90% (4.5)
+                ghosts.forEach(g => g.speed = 3.5);      // 적 기본 (100%)
+            } else if (selectedDifficulty === 'hard') {
+                pacman.speed = 5.0 * 0.9;                // 팩맨 90% (4.5)
+                ghosts.forEach(g => g.speed = 3.5 * 1.1);// 적 110% (3.85)
+            }
+        }
+
+        // [추가] 시작 화면에서 클릭한 버튼에 맞춰 난이도와 사운드를 물리고 게임 시작
+        function startGameWithDifficulty(diff) {
+            getAudioContext(); 
+            playIntroSound(); 
+
+            selectedDifficulty = diff;
+            applyDifficultySpeeds();
+
+            document.getElementById('start-screen').classList.add('hidden');
+            gameState = 'PLAYING';
+            clock.getDelta(); 
+        }
+
+        function endGameOver() {
+            gameState = 'GAMEOVER';
+            document.getElementById('final-score').textContent = "SCORE: " + String(pacman.score).padStart(4, '0');
+            document.getElementById('gameover-screen').classList.remove('hidden');
+        }
+
+        function restartGame() {
+            document.getElementById('gameover-screen').classList.add('hidden');
+            currentStage = 0; 
+            rebuildTotalScene();
+        }
+
+        function endLevelClear() {
+            gameState = 'LEVELCLEAR';
+            document.getElementById('clear-screen').classList.remove('hidden');
+        }
+
+        function startNextStage() {
+            document.getElementById('clear-screen').classList.add('hidden');
+            currentStage++; 
+            rebuildTotalScene();
+        }
+
+        function rebuildTotalScene() {
+            for (let key in pelletMeshes) {
+                scene.remove(pelletMeshes[key]);
+            }
+            pelletMeshes = {};
+
+            const nextColor = wallColors[currentStage % wallColors.length];
+            wallMaterial.color.setHex(nextColor);
+
+            for (let z = 0; z < ROWS; z++) {
+                for (let x = 0; x < COLS; x++) {
+                    const cell = mapData[z][x];
+                    if (cell === 0) {
+                        const originalType = (z === 1 || z === 13) && (x === 1 || x === 13) ? 3 : 2;
+                        if (z >= 4 && z <= 9 && x >= 4 && x <= 10) {
+                        } else {
+                            mapData[z][x] = originalType;
+                        }
+                    }
+                }
+            }
+
+            buildMap();
+
+            pacman.lives = 3;
+            pacman.score = 0;
+            updateScoreUI();
+            updateLivesUI();
+
+            resetActorPosition(pacman, 7, 13);
+            ghosts.forEach((ghost, index) => {
+                let startX = 7;
+                let startZ = 7;
+                if (ghost.name === "Blinky") { startX = 7; startZ = 5; }
+                else if (ghost.name === "Pinky") { startX = 7; startZ = 6; }
+                else { startX = 7; startZ = 7; }
+
+                resetActorPosition(ghost, startX, startZ);
+                ghost.state = 'CHASE';
+                ghost.bodyMesh.visible = true;
+                updateGhostVisualColor(ghost);
+            });
+
+            // [추가] 재시작 혹은 스테이지 초기화 시 선택했던 속도 프리셋 재바인딩
+            applyDifficultySpeeds();
+
+            document.getElementById('power-gauge-container').style.opacity = '0';
+            powerTimer = 0.0;
+
+            gameState = 'PLAYING';
+            clock.getDelta();
+            playIntroSound(); 
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth / PIXEL_SCALE, window.innerHeight / PIXEL_SCALE, false);
+        }
+
+        // --- 마스터 업데이트 및 렌더 틱 ---
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const delta = Math.min(clock.getDelta(), 0.1); 
+
+            if (gameState === 'PLAYING') {
+                if (powerTimer > 0) {
+                    powerTimer -= delta;
+                    const percent = (powerTimer / POWER_DURATION) * 100;
+                    document.getElementById('power-gauge-bar').style.width = percent + '%';
+
+                    ghosts.forEach(ghost => {
+                        if (ghost.state === 'FRIGHTENED') {
+                            updateGhostVisualColor(ghost);
+                        }
+                    });
+
+                    if (powerTimer <= 0) {
+                        document.getElementById('power-gauge-container').style.opacity = '0';
+                        ghosts.forEach(ghost => {
+                            if (ghost.state === 'FRIGHTENED') {
+                                ghost.state = 'CHASE';
+                                updateGhostVisualColor(ghost);
+                            }
+                        });
+                    }
+                }
+
+                const cycle = Math.floor(clock.getElapsedTime() / 20) % 2;
+                ghosts.forEach(ghost => {
+                    if (ghost.state !== 'FRIGHTENED' && ghost.state !== 'EATEN') {
+                        ghost.state = cycle === 0 ? 'CHASE' : 'SCATTER';
+                    }
+                });
+
+                updatePacman(delta);
+                updateGhosts(delta);
+                checkActorCollisions();
+
+                for (let key in pelletMeshes) {
+                    const mesh = pelletMeshes[key];
+                    if (mesh.geometry.type === 'SphereGeometry' && mesh.scale.x > 1.1) {
+                        const pulse = 1.0 + Math.sin(clock.getElapsedTime() * 11) * 0.15;
+                        mesh.scale.set(pulse, pulse, pulse);
+                    }
+                }
+            }
+
+            if (pacman.mesh) {
+                const relativeCamOffset = new THREE.Vector3(0, 9.5, 6.5);
+                const targetCameraPos = pacman.mesh.position.clone().add(relativeCamOffset);
+                
+                camera.position.lerp(targetCameraPos, 0.08); 
+                camera.lookAt(pacman.mesh.position.clone().add(new THREE.Vector3(0, 0, -0.5)));
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>
