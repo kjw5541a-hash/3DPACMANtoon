@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>PAC-MAN 3D TOON - Cute Pixel Edition</title>
+    <title>PAC-MAN 3D TOON - Cute Pixel Tilt Edition</title>
     <style>
         * {
             box-sizing: border-box;
@@ -27,7 +27,6 @@
             left: 0;
             z-index: 1;
         }
-        /* 3D 화면을 귀여운 레트로 픽셀화로 강제 렌더링하는 CSS 스타일 */
         #canvas-container canvas {
             display: block;
             width: 100% !important;
@@ -153,10 +152,12 @@
             bottom: 20px;
             left: 50%;
             transform: translateX(-50%);
-            color: rgba(255, 255, 255, 0.4);
-            font-size: 12px;
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 13px;
             text-align: center;
             pointer-events: none;
+            line-height: 1.4;
+            font-weight: bold;
         }
     </style>
     <!-- Three.js Library CDN -->
@@ -181,7 +182,7 @@
             <div id="power-gauge-bar"></div>
         </div>
 
-        <div id="mobile-hint">화면을 원하는 방향으로 쓸어 넘겨 조작하세요 (Swipe)</div>
+        <div id="mobile-hint">기울기(Tilt) 센서 활성화 완료<br>폰을 기울여서 조작하세요!</div>
     </div>
 
     <!-- Start Screen (난이도 선택 기능 탑재) -->
@@ -205,6 +206,7 @@
     <!-- Level Clear Screen -->
     <div id="clear-screen" class="screen-overlay hidden">
         <div class="screen-title" style="color: #00ffcc; text-shadow: 0 0 15px rgba(0,255,204,0.8);">STAGE CLEAR!</div>
+        <div id="stage-info-text" style="font-size: 16px; margin-bottom: 20px; color: #fff;"></div>
         <button class="screen-btn" id="next-btn">NEXT STAGE</button>
     </div>
 
@@ -237,8 +239,8 @@
         let scene, camera, renderer;
         let clock = new THREE.Clock();
         let gameState = 'START'; 
-        let currentStage = 0; 
-        let selectedDifficulty = 'easy'; // 전역 난이도 캐싱
+        let currentStage = 0; // 0부터 시작하는 내부 스테이지 카운터 (클리어할 때마다 증가)
+        let selectedDifficulty = 'easy'; // 기본 선택 난이도
 
         // 팩맨 데이터 및 기본 스피드 정의
         let pacman = {
@@ -253,7 +255,7 @@
             dirZ: 0,
             nextDirX: 0,
             nextDirZ: 0,
-            speed: 5.0, // 난이도에 의해 유동적으로 변화
+            speed: 5.0, 
             progress: 0.0,
             score: 0,
             lives: 3
@@ -283,14 +285,12 @@
         let remainingPellets = 0;
 
         let powerTimer = 0.0;
-        const POWER_DURATION = 10.0; 
+        const DEFAULT_POWER_DURATION = 10.0; // 기본 지속 시간
+        let currentPowerDuration = 10.0;     // 스테이지 증가 시 짧아질 유동 변수
 
         let wallGeometry, wallMaterial;
         let pelletGeometry, pelletMaterial;
         let powerPelletGeometry, powerPelletMaterial;
-
-        let touchStartX = 0;
-        let touchStartY = 0;
 
         // --- 고도화 사운드 신시사이저 엔진 (Web Audio API) ---
         let audioCtx = null;
@@ -670,6 +670,7 @@
 
         // --- 컨트롤 핸들러 구성 ---
         function setupInputControls() {
+            // 데스크톱 키보드 바인딩 (PC 개발자 디버깅용 유지)
             window.addEventListener('keydown', (e) => {
                 if (gameState !== 'PLAYING') return;
                 switch (e.key) {
@@ -691,30 +692,61 @@
                         requestDirection(1, 0); break;
                 }
             });
+        }
 
-            window.addEventListener('touchstart', (e) => {
-                touchStartX = e.touches[0].clientX;
-                touchStartY = e.touches[0].clientY;
-            }, { passive: true });
+        // [추가] 모바일 자이로/기울기(Tilt) 조작용 이벤트 리스너 함수
+        function handleOrientation(event) {
+            if (gameState !== 'PLAYING') return;
+            const beta = event.beta;   // 앞뒤 회전값 (-180 ~ 180). 폰을 45도 가량 자연스럽게 눕혔을 때 기준
+            const gamma = event.gamma; // 좌우 회전값 (-90 ~ 90)
 
-            window.addEventListener('touchend', (e) => {
-                if (gameState !== 'PLAYING') return;
-                const touchEndX = e.changedTouches[0].clientX;
-                const touchEndY = e.changedTouches[0].clientY;
+            if (beta === null || gamma === null) return;
 
-                const dx = touchEndX - touchStartX;
-                const dy = touchEndY - touchStartY;
+            // 중립(Neutral) 자세 기준값 설정: 폰을 비스듬히 든 45도각을 중심으로 설정
+            const neutralBeta = 45;
+            const tiltThreshold = 12; // 12도 이상 기울였을 때 트리거 발동
 
-                if (Math.abs(dx) > 30 || Math.abs(dy) > 30) {
-                    if (Math.abs(dx) > Math.abs(dy)) {
-                        if (dx > 0) requestDirection(1, 0);
-                        else requestDirection(-1, 0);
-                    } else {
-                        if (dy > 0) requestDirection(0, 1);
-                        else requestDirection(0, -1);
-                    }
+            const deltaBeta = beta - neutralBeta;
+            const deltaGamma = gamma;
+
+            // 가장 많이 기울여진 주행축 판정 (가로축 vs 세로축 절대값 비교)
+            if (Math.abs(deltaGamma) > Math.abs(deltaBeta)) {
+                // 좌우 회전 제어 우선
+                if (deltaGamma < -tiltThreshold) {
+                    requestDirection(-1, 0); // 좌측으로 회전
+                } else if (deltaGamma > tiltThreshold) {
+                    requestDirection(1, 0);  // 우측으로 회전
                 }
-            }, { passive: true });
+            } else {
+                // 앞뒤 회전 제어 우선
+                if (deltaBeta < -tiltThreshold) {
+                    requestDirection(0, -1); // 위로 전진 (기기를 앞으로 숙임)
+                } else if (deltaBeta > tiltThreshold) {
+                    requestDirection(0, 1);  // 아래로 후진 (기기를 뒤로 눕힘)
+                }
+            }
+        }
+
+        // [추가] 자이로 센서 브라우저 권한 요청 기능 (iOS 13+ 사양 완벽 대응)
+        function requestOrientationPermission() {
+            if (typeof DeviceOrientationEvent !== 'undefined' && 
+                typeof DeviceOrientationEvent.requestPermission === 'function') {
+                
+                DeviceOrientationEvent.requestPermission()
+                    .then(permissionState => {
+                        if (permissionState === 'granted') {
+                            window.addEventListener('deviceorientation', handleOrientation);
+                        } else {
+                            console.warn("기울기 센서 권한이 거부되었습니다.");
+                        }
+                    })
+                    .catch(error => {
+                        console.error("기울기 센서 요청 에러:", error);
+                    });
+            } else {
+                // 일반 안드로이드 기기 및 권한 필요 없는 환경 지원
+                window.addEventListener('deviceorientation', handleOrientation);
+            }
         }
 
         function requestDirection(dx, dz) {
@@ -998,7 +1030,7 @@
         }
 
         function activatePowerMode() {
-            powerTimer = POWER_DURATION;
+            powerTimer = currentPowerDuration; // 점진적으로 짧아진 파워타임 바인딩
             document.getElementById('power-gauge-container').style.opacity = '1';
 
             ghosts.forEach(ghost => {
@@ -1107,27 +1139,49 @@
 
         // --- 난이도 선택 분기 및 라이프사이클 처리 ---
 
-        // [추가] 선택한 난이도 사양에 맞춘 팩맨/적들의 실시간 이동 속도 대입 함수
+        // 유저가 고른 초기 난이도 스피드 반영식
         function applyDifficultySpeeds() {
             if (selectedDifficulty === 'easy') {
-                pacman.speed = 5.0;                      // 팩맨 기본 (100%)
-                ghosts.forEach(g => g.speed = 3.5);      // 적 기본 (100%)
+                pacman.speed = 5.0;                      
+                ghosts.forEach(g => g.speed = 3.5);      
             } else if (selectedDifficulty === 'medium') {
-                pacman.speed = 5.0 * 0.9;                // 팩맨 90% (4.5)
-                ghosts.forEach(g => g.speed = 3.5);      // 적 기본 (100%)
+                pacman.speed = 5.0 * 0.9;                // 4.5
+                ghosts.forEach(g => g.speed = 3.5);      
             } else if (selectedDifficulty === 'hard') {
-                pacman.speed = 5.0 * 0.9;                // 팩맨 90% (4.5)
-                ghosts.forEach(g => g.speed = 3.5 * 1.1);// 적 110% (3.85)
+                pacman.speed = 5.0 * 0.9;                // 4.5
+                ghosts.forEach(g => g.speed = 3.5 * 1.1);// 3.85
             }
         }
 
-        // [추가] 시작 화면에서 클릭한 버튼에 맞춰 난이도와 사운드를 물리고 게임 시작
+        // [추가] 스테이지 클리어 단계가 올라갈수록 점진적으로 배가되는 고도화 난이도 상향 연산식 (Core logic)
+        function applyProgressiveDifficulty() {
+            // 1단계: 먼저 베이스 난이도 속도를 설정
+            applyDifficultySpeeds();
+
+            // 2단계: 스테이지가 상승할 때마다 보정 배율 적용 (현재 스테이지 단계를 대입)
+            // 고스트 이동 속도: 스테이지당 +5% 복리 증가
+            const ghostSpeedMultiplier = Math.pow(1.05, currentStage);
+            ghosts.forEach(g => g.speed *= ghostSpeedMultiplier);
+
+            // 팩맨 이동 속도: 스테이지당 +2% 복리 증가 (고스트 속도가 훨씬 빠르게 늘어 상향 변별력 발생)
+            const pacmanSpeedMultiplier = Math.pow(1.02, currentStage);
+            pacman.speed *= pacmanSpeedMultiplier;
+
+            // 파워 지속시간 단축: 스테이지당 1초 단축 (최대 10초에서 최하 3초로 안전 마진 방어선 고정)
+            currentPowerDuration = Math.max(3.0, DEFAULT_POWER_DURATION - currentStage * 1.0);
+        }
+
         function startGameWithDifficulty(diff) {
             getAudioContext(); 
             playIntroSound(); 
+            
+            // 모바일 틸트(자이로) 센서 접근 권한 상호작용 트리거 발동
+            requestOrientationPermission();
 
             selectedDifficulty = diff;
-            applyDifficultySpeeds();
+            
+            // 초기 난이도 및 0단계 보정 수치 연계
+            applyProgressiveDifficulty();
 
             document.getElementById('start-screen').classList.add('hidden');
             gameState = 'PLAYING';
@@ -1148,6 +1202,15 @@
 
         function endLevelClear() {
             gameState = 'LEVELCLEAR';
+            
+            // 다음 판 상세 정보 고지
+            const nextStageNum = currentStage + 2; 
+            const estimatedDuration = Math.max(3, 10 - (currentStage + 1));
+            document.getElementById('stage-info-text').innerHTML = 
+                `다음 판: Stage ${nextStageNum}<br>` + 
+                `<span style="color:#ff3333; font-weight:bold;">적 속도 +5% 상승</span> 및 ` +
+                `<span style="color:#00ffff; font-weight:bold;">파워 지속 시간 ${estimatedDuration}초로 단축!</span>`;
+
             document.getElementById('clear-screen').classList.remove('hidden');
         }
 
@@ -1200,8 +1263,8 @@
                 updateGhostVisualColor(ghost);
             });
 
-            // [추가] 재시작 혹은 스테이지 초기화 시 선택했던 속도 프리셋 재바인딩
-            applyDifficultySpeeds();
+            // 점진형 빌드 난이도 가중치 재계산 및 덮어쓰기 적용
+            applyProgressiveDifficulty();
 
             document.getElementById('power-gauge-container').style.opacity = '0';
             powerTimer = 0.0;
@@ -1226,7 +1289,7 @@
             if (gameState === 'PLAYING') {
                 if (powerTimer > 0) {
                     powerTimer -= delta;
-                    const percent = (powerTimer / POWER_DURATION) * 100;
+                    const percent = (powerTimer / currentPowerDuration) * 100;
                     document.getElementById('power-gauge-bar').style.width = percent + '%';
 
                     ghosts.forEach(ghost => {
