@@ -2,13 +2,21 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="screen-orientation" content="landscape">
     <title>PAC-MAN 3D TOON - Cute Pixel Unified Controls</title>
     <style>
         * {
             box-sizing: border-box;
             user-select: none;
             -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            -webkit-tap-highlight-color: transparent;
+            -webkit-touch-callout: none;
         }
         body, html {
             margin: 0;
@@ -18,6 +26,10 @@
             overflow: hidden;
             background-color: #04040c;
             font-family: 'Courier New', Courier, monospace, sans-serif;
+            touch-action: none;
+            position: fixed;
+            top: 0;
+            left: 0;
         }
         #canvas-container {
             width: 100%;
@@ -45,14 +57,24 @@
             height: 100%;
             z-index: 10;
             pointer-events: none;
+            display: -webkit-flex;
             display: flex;
+            -webkit-flex-direction: column;
             flex-direction: column;
+            -webkit-justify-content: space-between;
             justify-content: space-between;
-            padding: 15px;
+            padding: 10px;
+            padding-top: max(10px, env(safe-area-inset-top, 0px));
+            padding-left: max(10px, env(safe-area-inset-left, 0px));
+            padding-right: max(10px, env(safe-area-inset-right, 0px));
+            padding-bottom: max(10px, env(safe-area-inset-bottom, 0px));
         }
         .header {
+            display: -webkit-flex;
             display: flex;
+            -webkit-justify-content: space-between;
             justify-content: space-between;
+            -webkit-align-items: center;
             align-items: center;
             width: 100%;
         }
@@ -60,41 +82,45 @@
             background: rgba(10, 10, 30, 0.85);
             border: 2px solid #3333ff;
             border-radius: 8px;
-            padding: 8px 15px;
+            padding: 6px 12px;
             color: #ffd700;
-            font-size: 18px;
+            font-size: 14px;
             font-weight: bold;
             box-shadow: 0 0 10px rgba(51, 51, 255, 0.5);
         }
         .lives-board {
+            display: -webkit-flex;
             display: flex;
-            gap: 5px;
+            gap: 4px;
             background: rgba(10, 10, 30, 0.85);
             border: 2px solid #ff3333;
             border-radius: 8px;
-            padding: 8px 12px;
+            padding: 6px 10px;
             box-shadow: 0 0 10px rgba(255, 51, 51, 0.5);
         }
         .life-heart {
-            width: 18px;
-            height: 18px;
+            width: 15px;
+            height: 15px;
             background-color: #ff3333;
+            -webkit-clip-path: polygon(50% 15%, 80% 0%, 100% 20%, 100% 50%, 50% 95%, 0% 50%, 0% 20%, 20% 0%);
             clip-path: polygon(50% 15%, 80% 0%, 100% 20%, 100% 50%, 50% 95%, 0% 50%, 0% 20%, 20% 0%);
         }
         /* Power Gauge */
         #power-gauge-container {
             position: absolute;
-            top: 75px;
+            top: 50px;
             left: 50%;
+            -webkit-transform: translateX(-50%);
             transform: translateX(-50%);
-            width: 60%;
-            max-width: 300px;
-            height: 15px;
+            width: 40%;
+            max-width: 250px;
+            height: 12px;
             background: rgba(0, 0, 0, 0.6);
             border: 2px solid #00ffff;
             border-radius: 10px;
             overflow: hidden;
             opacity: 0;
+            -webkit-transition: opacity 0.3s ease;
             transition: opacity 0.3s ease;
         }
         #power-gauge-bar {
@@ -112,18 +138,22 @@
             height: 100%;
             background: rgba(5, 5, 15, 0.92);
             z-index: 20;
+            display: -webkit-flex;
             display: flex;
+            -webkit-flex-direction: column;
             flex-direction: column;
+            -webkit-justify-content: center;
             justify-content: center;
+            -webkit-align-items: center;
             align-items: center;
             color: #fff;
             pointer-events: auto;
         }
         .screen-title {
-            font-size: 32px;
+            font-size: 28px;
             color: #ffd700;
             text-align: center;
-            margin-bottom: 20px;
+            margin-bottom: 15px;
             text-shadow: 0 0 15px rgba(255, 215, 0, 0.8), 3px 3px 0px #aa0000;
             font-weight: 900;
             letter-spacing: 2px;
@@ -132,15 +162,18 @@
             background: #ffd700;
             color: #000;
             border: none;
-            padding: 12px 30px;
-            font-size: 18px;
+            padding: 10px 28px;
+            font-size: 16px;
             font-weight: bold;
             border-radius: 25px;
             cursor: pointer;
             box-shadow: 0 5px 0px #b89c00, 0 8px 15px rgba(255, 215, 0, 0.4);
+            -webkit-transition: transform 0.1s, box-shadow 0.1s;
             transition: transform 0.1s, box-shadow 0.1s;
+            touch-action: manipulation;
         }
         .screen-btn:active {
+            -webkit-transform: translateY(4px);
             transform: translateY(4px);
             box-shadow: 0 1px 0px #b89c00, 0 4px 5px rgba(255, 215, 0, 0.4);
         }
@@ -149,16 +182,82 @@
         }
         #mobile-hint {
             position: absolute;
-            bottom: 20px;
+            bottom: 10px;
             left: 50%;
+            -webkit-transform: translateX(-50%);
             transform: translateX(-50%);
             color: rgba(255, 255, 255, 0.5);
-            font-size: 13px;
+            font-size: 11px;
             text-align: center;
             pointer-events: none;
-            line-height: 1.4;
+            line-height: 1.3;
             font-weight: bold;
             width: 90%;
+        }
+
+        /* === 모바일 가로 최적화 === */
+        @media screen and (max-height: 500px) and (orientation: landscape) {
+            .screen-title { font-size: 22px; margin-bottom: 10px; }
+            .screen-btn { padding: 8px 24px; font-size: 14px; }
+            .score-board { font-size: 12px; padding: 4px 8px; }
+            .lives-board { padding: 4px 8px; }
+            .life-heart { width: 12px; height: 12px; }
+            #power-gauge-container { top: 38px; height: 10px; width: 30%; }
+            #mobile-hint { display: none; }
+        }
+
+        /* 스타트 화면 가로 모드: 난이도 버튼 가로 배치 */
+        @media screen and (orientation: landscape) {
+            #start-screen .difficulty-row {
+                -webkit-flex-direction: row !important;
+                flex-direction: row !important;
+                gap: 12px !important;
+                width: auto !important;
+            }
+            #start-screen .difficulty-row .screen-btn {
+                padding: 10px 22px;
+                font-size: 14px;
+            }
+        }
+
+        /* 세로 모드 회전 유도 오버레이 */
+        #rotate-hint {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0,0,0,0.92);
+            z-index: 9999;
+            -webkit-justify-content: center;
+            justify-content: center;
+            -webkit-align-items: center;
+            align-items: center;
+            -webkit-flex-direction: column;
+            flex-direction: column;
+            color: #ffd700;
+            font-size: 18px;
+            font-weight: bold;
+            text-align: center;
+        }
+        #rotate-hint .rotate-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+            -webkit-animation: rotateHint 2s ease-in-out infinite;
+            animation: rotateHint 2s ease-in-out infinite;
+        }
+        @-webkit-keyframes rotateHint {
+            0%, 100% { -webkit-transform: rotate(0deg); transform: rotate(0deg); }
+            50% { -webkit-transform: rotate(90deg); transform: rotate(90deg); }
+        }
+        @keyframes rotateHint {
+            0%, 100% { transform: rotate(0deg); }
+            50% { transform: rotate(90deg); }
+        }
+        @media screen and (orientation: portrait) and (max-width: 768px) {
+            #rotate-hint {
+                display: -webkit-flex;
+                display: flex;
+            }
         }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -179,25 +278,14 @@
         <div id="power-gauge-container">
             <div id="power-gauge-bar"></div>
         </div>
-        <div id="mobile-hint">가상 D-pad, 화면 스와이프, 키보드로 자유롭게 플레이하세요!</div>
-    </div>
-
-    <!-- 반투명 가상 D-pad 오버레이 -->
-    <div id="dpad-container" style="position: absolute; bottom: 30px; right: 30px; width: 140px; height: 140px; z-index: 15; pointer-events: auto; display: none;">
-        <div style="position: relative; width: 100%; height: 100%;">
-            <div style="position: absolute; top: 10px; left: 10px; width: 120px; height: 120px; background: rgba(255, 255, 255, 0.05); border: 2px solid rgba(0, 255, 255, 0.15); border-radius: 50%; pointer-events: none;"></div>
-            <button id="dpad-up" style="position: absolute; top: 0; left: 45px; width: 50px; height: 40px; background: rgba(0, 255, 255, 0.25); border: 1px solid #00ffff; border-radius: 8px; color: #00ffff; font-size: 18px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; outline: none; touch-action: manipulation;">▲</button>
-            <button id="dpad-left" style="position: absolute; top: 45px; left: 0; width: 40px; height: 50px; background: rgba(0, 255, 255, 0.25); border: 1px solid #00ffff; border-radius: 8px; color: #00ffff; font-size: 18px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; outline: none; touch-action: manipulation;">◀</button>
-            <button id="dpad-right" style="position: absolute; top: 45px; right: 0; width: 40px; height: 50px; background: rgba(0, 255, 255, 0.25); border: 1px solid #00ffff; border-radius: 8px; color: #00ffff; font-size: 18px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; outline: none; touch-action: manipulation;">▶</button>
-            <button id="dpad-down" style="position: absolute; bottom: 0; left: 45px; width: 50px; height: 40px; background: rgba(0, 255, 255, 0.25); border: 1px solid #00ffff; border-radius: 8px; color: #00ffff; font-size: 18px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; outline: none; touch-action: manipulation;">▼</button>
-        </div>
+        <div id="mobile-hint">화면 스와이프와 키보드로 자유롭게 플레이하세요!</div>
     </div>
 
     <!-- Start Screen -->
     <div id="start-screen" class="screen-overlay">
         <div class="screen-title">PAC-MAN<br>3D CUTE PIXEL</div>
-        <div style="font-size: 15px; margin-bottom: 20px; color: #aaa; font-weight: bold;">난이도를 선택해 시작하세요</div>
-        <div style="display: flex; flex-direction: column; gap: 15px; width: 220px;">
+        <div style="font-size: 14px; margin-bottom: 15px; color: #aaa; font-weight: bold;">난이도를 선택해 시작하세요</div>
+        <div class="difficulty-row" style="display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; gap: 12px; width: 200px;">
             <button class="screen-btn" onclick="startGameWithDifficulty('easy')">하 (쉬움)</button>
             <button class="screen-btn" onclick="startGameWithDifficulty('medium')" style="background: #ffb852; box-shadow: 0 5px 0px #b8811c;">중 (보통)</button>
             <button class="screen-btn" onclick="startGameWithDifficulty('hard')" style="background: #ff3333; box-shadow: 0 5px 0px #b81c1c; color: white;">상 (어려움)</button>
@@ -216,6 +304,13 @@
         <div class="screen-title" style="color: #00ffcc; text-shadow: 0 0 15px rgba(0,255,204,0.8);">STAGE CLEAR!</div>
         <div id="stage-info-text" style="font-size: 16px; margin-bottom: 20px; color: #fff;"></div>
         <button class="screen-btn" id="next-btn">NEXT STAGE</button>
+    </div>
+
+    <!-- 세로 모드 회전 유도 오버레이 -->
+    <div id="rotate-hint">
+        <div class="rotate-icon">📱</div>
+        <div>화면을 가로로 회전해 주세요</div>
+        <div style="font-size: 13px; color: #aaa; margin-top: 8px;">Rotate to landscape</div>
     </div>
 
     <script>
@@ -299,6 +394,14 @@
 
         let touchStartX = 0;
         let touchStartY = 0;
+
+        // 카메라 추적 시스템 변수
+        const CAM_HEIGHT = 13;       // 카메라 높이
+        const CAM_OFFSET_Z = 7.5;    // 카메라 Z 오프셋 (뒤쪽)
+        const CAM_LOOK_AHEAD = 1.5;  // 시선 전방 오프셋
+        const CAM_LERP = 0.06;       // 부드러운 추적 보간 계수
+        let camTargetX = 0;
+        let camTargetZ = 0;
 
         // ===== 사운드 신시사이저 엔진 (Web Audio API) =====
         let audioCtx = null;
@@ -448,8 +551,13 @@
             scene.fog = new THREE.FogExp2(0x050510, 0.038);
 
             camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 100);
-            camera.position.set(0, 11, 8.5);
-            camera.lookAt(0, 0, -1);
+            // 초기 카메라 위치: 팩맨 스폰(7,13) 기준
+            const spawnWorldX = (7 - COLS / 2) * TILE_SIZE;
+            const spawnWorldZ = (13 - ROWS / 2) * TILE_SIZE;
+            camTargetX = spawnWorldX;
+            camTargetZ = spawnWorldZ;
+            camera.position.set(spawnWorldX, CAM_HEIGHT, spawnWorldZ + CAM_OFFSET_Z);
+            camera.lookAt(spawnWorldX, 0, spawnWorldZ - CAM_LOOK_AHEAD);
 
             renderer = new THREE.WebGLRenderer({ antialias: false });
             renderer.setSize(window.innerWidth / PIXEL_SCALE, window.innerHeight / PIXEL_SCALE, false);
@@ -695,23 +803,6 @@
                     }
                 }
             }, { passive: true });
-
-            bindDpadButton('dpad-up', 0, -1);
-            bindDpadButton('dpad-down', 0, 1);
-            bindDpadButton('dpad-left', -1, 0);
-            bindDpadButton('dpad-right', 1, 0);
-        }
-
-        function bindDpadButton(elementId, dx, dz) {
-            const el = document.getElementById(elementId);
-            if (!el) return;
-            const handler = (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                if (gameState === 'PLAYING') requestDirection(dx, dz);
-            };
-            el.addEventListener('touchstart', handler, { passive: false });
-            el.addEventListener('mousedown', handler);
         }
 
         function requestDirection(dx, dz) {
@@ -720,8 +811,7 @@
         }
 
         function updateDpadVisibility() {
-            const dpad = document.getElementById('dpad-container');
-            if (dpad) dpad.style.display = (gameState === 'PLAYING') ? 'block' : 'none';
+            // D-pad removed
         }
 
         function isPassable(gridX, gridZ) {
@@ -1376,6 +1466,14 @@
             powerTimer = 0;
             document.getElementById('power-gauge-container').style.opacity = '0';
             if (sirenInterval) { clearInterval(sirenInterval); sirenInterval = null; }
+
+            // 카메라 추적 위치 즉시 리셋 (팩맨 스폰 기준)
+            var spawnWX = (7 - COLS / 2) * TILE_SIZE;
+            var spawnWZ = (13 - ROWS / 2) * TILE_SIZE;
+            camTargetX = spawnWX;
+            camTargetZ = spawnWZ;
+            camera.position.set(spawnWX, CAM_HEIGHT, spawnWZ + CAM_OFFSET_Z);
+            camera.lookAt(spawnWX, 0, spawnWZ - CAM_LOOK_AHEAD);
         }
 
         function endLevelClear() {
@@ -1413,16 +1511,34 @@
                 updateGhosts(delta);
                 checkActorCollisions();
 
+                // ★ 카메라 추적: 팩맨 위치를 부드럽게 따라가기
+                if (pacman.mesh) {
+                    const pacWorldX = pacman.mesh.position.x;
+                    const pacWorldZ = pacman.mesh.position.z;
+
+                    // 목표 위치 lerp 보간
+                    camTargetX += (pacWorldX - camTargetX) * CAM_LERP;
+                    camTargetZ += (pacWorldZ - camTargetZ) * CAM_LERP;
+
+                    camera.position.x += (camTargetX - camera.position.x) * CAM_LERP;
+                    camera.position.z += ((camTargetZ + CAM_OFFSET_Z) - camera.position.z) * CAM_LERP;
+                    camera.position.y += (CAM_HEIGHT - camera.position.y) * CAM_LERP;
+
+                    camera.lookAt(
+                        camTargetX,
+                        0,
+                        camTargetZ - CAM_LOOK_AHEAD
+                    );
+                }
+
                 // 파워 타이머 업데이트
                 if (powerTimer > 0) {
                     powerTimer -= delta;
 
-                    // 게이지 바 업데이트
-                    const gaugeBar = document.getElementById('power-gauge-bar');
+                    var gaugeBar = document.getElementById('power-gauge-bar');
                     gaugeBar.style.width = Math.max(0, (powerTimer / currentPowerDuration) * 100) + '%';
 
-                    // 고스트 색상 깜빡임 (종료 임박 시)
-                    ghosts.forEach(ghost => {
+                    ghosts.forEach(function(ghost) {
                         if (ghost.state === 'FRIGHTENED') {
                             updateGhostVisualColor(ghost);
                         }
@@ -1431,7 +1547,7 @@
                     if (powerTimer <= 0) {
                         powerTimer = 0;
                         document.getElementById('power-gauge-container').style.opacity = '0';
-                        ghosts.forEach(ghost => {
+                        ghosts.forEach(function(ghost) {
                             if (ghost.state === 'FRIGHTENED') {
                                 ghost.state = 'CHASE';
                                 updateGhostVisualColor(ghost);
@@ -1441,13 +1557,17 @@
                 }
 
                 // 파워 펠릿 애니메이션 (회전 + 부유)
-                Object.keys(pelletMeshes).forEach(key => {
-                    const [px, pz] = key.split(',').map(Number);
+                var pelletKeys = Object.keys(pelletMeshes);
+                for (var ki = 0; ki < pelletKeys.length; ki++) {
+                    var key = pelletKeys[ki];
+                    var coords = key.split(',');
+                    var px = parseInt(coords[0], 10);
+                    var pz = parseInt(coords[1], 10);
                     if (mapData[pz] && mapData[pz][px] === 3) {
                         pelletMeshes[key].scale.setScalar(1.0 + 0.2 * Math.sin(clock.getElapsedTime() * 4));
                         pelletMeshes[key].rotation.y += delta * 2;
                     }
-                });
+                }
             }
 
             renderer.render(scene, camera);
