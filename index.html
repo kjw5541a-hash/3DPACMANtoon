@@ -1270,16 +1270,12 @@
 
             // 4. 보호 셀 정의 (반드시 통로로 유지)
             const protectedSet = new Set();
-            // 팩맨 스폰 + 연결
             protectedSet.add('7,13'); protectedSet.add('7,12');
-            // 고스트 하우스 입구 연결
             protectedSet.add('7,3'); protectedSet.add('7,11');
-            // 사이드 터널 (z=7)
             for (let x = 1; x <= 3; x++) {
                 protectedSet.add(`${x},7`);
                 protectedSet.add(`${14 - x},7`);
             }
-            // 고스트 하우스 영역 전체
             for (let z = 4; z <= 10; z++)
                 for (let x = 4; x <= 10; x++)
                     protectedSet.add(`${x},${z}`);
@@ -1296,8 +1292,7 @@
                 [[0,0],[0,1],[0,2]]
             ];
 
-            // 스테이지가 높을수록 블록 수 증가 (더 복잡한 미로)
-            const numBlocks = 12 + Math.min(currentStage, 8) + Math.floor(Math.random() * 6);
+            const numBlocks = 14 + Math.min(currentStage, 8) + Math.floor(Math.random() * 6);
 
             for (let i = 0; i < numBlocks; i++) {
                 const block = wallBlocks[Math.floor(Math.random() * wallBlocks.length)];
@@ -1336,9 +1331,44 @@
                     if (protectedSet.has(`${mirrorX},${z}`)) continue;
                     if (mapData[z][x] === 1) continue;
 
-                    if (Math.random() < 0.15) {
+                    if (Math.random() < 0.18) {
                         mapData[z][x] = 1;
                         if (mirrorX !== x) mapData[z][mirrorX] = 1;
+                    }
+                }
+            }
+
+            // 6.5 ★ 넓은 공간 제거: 2x2 이상 열린 공간이 없도록 벽 채우기
+            for (let pass = 0; pass < 3; pass++) {
+                for (let z = 1; z <= 12; z++) {
+                    for (let x = 1; x <= 6; x++) {
+                        const mirrorX = 14 - x;
+                        // 2x2 빈 공간 감지
+                        if (mapData[z][x] !== 1 && mapData[z][x] !== 4 &&
+                            mapData[z][x+1] !== 1 && mapData[z][x+1] !== 4 &&
+                            mapData[z+1][x] !== 1 && mapData[z+1][x] !== 4 &&
+                            mapData[z+1][x+1] !== 1 && mapData[z+1][x+1] !== 4) {
+
+                            // 체커보드 패턴으로 대각선 위치에 벽 추가
+                            const candidates = (pass % 2 === 0)
+                                ? [{ cx: x, cz: z }, { cx: x+1, cz: z+1 }]
+                                : [{ cx: x+1, cz: z }, { cx: x, cz: z+1 }];
+
+                            for (const { cx, cz } of candidates) {
+                                const cmx = 14 - cx;
+                                if (!protectedSet.has(`${cx},${cz}`) &&
+                                    !protectedSet.has(`${cmx},${cz}`) &&
+                                    mapData[cz][cx] !== 1 && mapData[cz][cx] !== 4) {
+                                    mapData[cz][cx] = 1;
+                                    if (cmx !== cx && cmx >= 1 && cmx <= 13 &&
+                                        !protectedSet.has(`${cmx},${cz}`) &&
+                                        mapData[cz][cmx] !== 4) {
+                                        mapData[cz][cmx] = 1;
+                                    }
+                                    break;
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -1354,27 +1384,26 @@
                 }
             }
 
-            // 8. 최소 펠릿 수 보장 (부족하면 벽 제거)
+            // 8. 최소 펠릿 수 보장 (부족하면 벽 제거 — 2x2 공터 방지 체크 포함)
             let pelletCount = 0;
             for (let z = 0; z < ROWS; z++)
                 for (let x = 0; x < COLS; x++)
                     if (mapData[z][x] === 2) pelletCount++;
 
             let safety = 0;
-            while (pelletCount < 45 && safety < 200) {
+            while (pelletCount < 45 && safety < 300) {
                 safety++;
                 const z = 1 + Math.floor(Math.random() * 13);
                 const x = 1 + Math.floor(Math.random() * 13);
                 if (mapData[z][x] === 1
                     && !(z >= 4 && z <= 10 && x >= 4 && x <= 10)
                     && z > 0 && z < 14 && x > 0 && x < 14) {
-                    // 인접 통로 셀이 있을 때만 제거 (연결성 유지)
                     const hasAdjacentPath = [[-1,0],[1,0],[0,-1],[0,1]].some(([dz, dx]) => {
                         const nz = z + dz, nx = x + dx;
                         return nz >= 0 && nz < ROWS && nx >= 0 && nx < COLS
                                && mapData[nz][nx] !== 1 && mapData[nz][nx] !== 4;
                     });
-                    if (hasAdjacentPath) {
+                    if (hasAdjacentPath && !wouldCreate2x2Open(z, x)) {
                         mapData[z][x] = 2;
                         pelletCount++;
                     }
@@ -1391,6 +1420,22 @@
             for (let z = 0; z < ROWS; z++)
                 for (let x = 0; x < COLS; x++)
                     if (mapData[z][x] === 0) mapData[z][x] = 2;
+        }
+
+        // 해당 셀을 빈 공간으로 바꿨을 때 2x2 공터가 생기는지 검사
+        function wouldCreate2x2Open(z, x) {
+            // (z,x)를 비벽으로 취급했을 때, 이 셀이 포함된 2x2 영역 중 모두 비벽인 것이 있는지
+            const checkOpen = function(cz, cx) {
+                if (cz < 0 || cz >= ROWS || cx < 0 || cx >= COLS) return false;
+                if (cz === z && cx === x) return true; // 이 셀은 비벽으로 취급
+                return mapData[cz][cx] !== 1;
+            };
+            // (z,x)가 좌상, 우상, 좌하, 우하 코너인 4가지 2x2 조합 검사
+            if (checkOpen(z,x) && checkOpen(z,x+1) && checkOpen(z+1,x) && checkOpen(z+1,x+1)) return true;
+            if (checkOpen(z,x-1) && checkOpen(z,x) && checkOpen(z+1,x-1) && checkOpen(z+1,x)) return true;
+            if (checkOpen(z-1,x) && checkOpen(z-1,x+1) && checkOpen(z,x) && checkOpen(z,x+1)) return true;
+            if (checkOpen(z-1,x-1) && checkOpen(z-1,x) && checkOpen(z,x-1) && checkOpen(z,x)) return true;
+            return false;
         }
 
         // ===== 게임 라이프사이클 =====
